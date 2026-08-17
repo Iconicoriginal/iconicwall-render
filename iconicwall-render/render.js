@@ -21,6 +21,13 @@ const LOGOS = {
   },
 };
 
+// Formati supportati. 4:5 è il post e la slide di carosello, 9:16 è il fotogramma di reel.
+// La tipografia va composta sul formato in cui verrà vista: comporre in 4:5 e ritagliare
+// in fase di montaggio sposterebbe i titoli fuori posto.
+const FORMATI = { '4:5': { W: 1080, H: 1350 }, '9:16': { W: 1080, H: 1920 } };
+function dimensioni(cfg) {
+  return FORMATI[String((cfg && cfg.formato) || '4:5')] || FORMATI['4:5'];
+}
 const W = 1080, Hh = 1350;
 const INK = '#11110F', PAPER = '#F5F2EC', GOLD = '#C9A578', ACC = '#D8B486', LIGHT = '#EDE7DB';
 const SANS = "Arial, 'Helvetica Neue', sans-serif";
@@ -43,11 +50,12 @@ function posConf(pos) {
 }
 
 // Sceglie bianco/nero misurando la luminosità dell'angolo dove va il logo.
-async function autoLogoColor(imagePath, logoTop) {
+async function autoLogoColor(imagePath, logoTop, w, h) {
+  const LW = w || W, LH = h || Hh;
   try {
-    const top = logoTop ? 40 : (Hh - 240);
+    const top = logoTop ? 40 : (LH - 240);
     const region = { left: 60, top, width: 460, height: 200 };
-    const st = await sharp(imagePath).resize(W, Hh, { fit: 'cover' }).extract(region).stats();
+    const st = await sharp(imagePath).resize(LW, LH, { fit: 'cover' }).extract(region).stats();
     const [r, g, b] = st.channels.map(c => c.mean);
     const lum = 0.299 * r + 0.587 * g + 0.114 * b; // 0..255
     // La cornice scurisce l'angolo: passo al nero solo se l'angolo è davvero chiaro.
@@ -57,7 +65,9 @@ async function autoLogoColor(imagePath, logoTop) {
   }
 }
 
-function buildHtml(cfg, logoPath) {
+function buildHtml(cfg, logoPath, w, h) {
+  const W = w || FORMATI['4:5'].W;
+  const Hh = h || FORMATI['4:5'].H;
   const pos = (cfg.position || 'BL').toUpperCase();
   const P = posConf(pos);
   if (!P) throw new Error('bad position');
@@ -99,6 +109,8 @@ h1 .accent{color:${ACC};font-style:italic;}
 }
 
 async function render(cfg) {
+  const dim = dimensioni(cfg);
+  const W = dim.W, Hh = dim.H;
   const pos = (cfg.position || 'BL').toUpperCase();
   const P = posConf(pos) || posConf('BL');
   const brand = (cfg.brand || 'iconicwall').toLowerCase();
@@ -106,11 +118,11 @@ async function render(cfg) {
   let color = (cfg.logo || 'auto').toLowerCase();
   const localImage = !/^https?:/i.test(String(cfg.image || ''));
   if (color !== 'white' && color !== 'black') {
-    color = localImage ? await autoLogoColor(cfg.image, P.logoTop) : 'white';
+    color = localImage ? await autoLogoColor(cfg.image, P.logoTop, W, Hh) : 'white';
   }
   const logoPath = set[color] || set.white;
 
-  const html = buildHtml(cfg, logoPath);
+  const html = buildHtml(cfg, logoPath, W, Hh);
   const hp = path.join(os.tmpdir(), 'post_' + process.pid + '_' + Math.floor(Math.random() * 1e9) + '.html');
   fs.writeFileSync(hp, html);
   const b = await chromium.launch({ args: ['--no-sandbox'] });
@@ -119,7 +131,7 @@ async function render(cfg) {
     await p.goto('file://' + hp, { waitUntil: 'load' });
     await p.waitForTimeout(localImage ? 700 : 3500);
     const png = await p.screenshot({ clip: { x: 0, y: 0, width: W, height: Hh } });
-    const jpg = await sharp(png).resize(1080, 1350, { kernel: 'lanczos3' }).sharpen({ sigma: 1.2, m1: 0, m2: 1.0 }).jpeg({ quality: 92 }).toBuffer();
+    const jpg = await sharp(png).resize(W, Hh, { kernel: 'lanczos3' }).sharpen({ sigma: 1.2, m1: 0, m2: 1.0 }).jpeg({ quality: 92 }).toBuffer();
     return jpg;
   } finally {
     await b.close();
