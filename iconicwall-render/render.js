@@ -15,9 +15,11 @@ const LOGOS = {
     white: path.join(ASSETS, 'iconicwall-logo-white.png'),
     black: path.join(ASSETS, 'iconicwall-logo-black.png'),
   },
+  // SVG e non PNG: Chromium lo disegna nitido a qualunque misura. Il PNG che
+  // stava qui perdeva la riga «dress your interiors» e il marchio usciva mozzo.
   iconic: {
-    white: path.join(ASSETS, 'iconic-logo-white.png'),
-    black: path.join(ASSETS, 'iconic-logo-black.png'),
+    white: path.join(ASSETS, 'iconic-logo-white.svg'),
+    black: path.join(ASSETS, 'iconic-logo-black.svg'),
   },
 };
 
@@ -104,6 +106,7 @@ h1 .accent{color:${ACC};font-style:italic;}
 </style></head><body>
 <div class="canvas"><div class="bg"></div><div class="veil"></div>
 <img class="logo" src="file://${logoFile}">${number}
+<img id="sonda" src="${cfg.image}" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">
 <div class="tb">${eyebrow}<div class="rule"></div>${title}${chip}${sub}${cta}</div>${site}
 </div></body></html>`;
 }
@@ -114,7 +117,14 @@ async function render(cfg) {
   const pos = (cfg.position || 'BL').toUpperCase();
   const P = posConf(pos) || posConf('BL');
   const brand = (cfg.brand || 'iconicwall').toLowerCase();
-  const set = LOGOS[brand] || LOGOS.iconicwall;
+  // Un brand sconosciuto NON ripiega. Ripiegando in silenzio, per tre settimane
+  // ogni card Iconic Original e uscita col logo IconicWall senza che nessuno se
+  // ne accorgesse: chi chiamava mandava 'iconicoriginal', chiave inesistente.
+  // Meglio un 500 che una card bella e sbagliata.
+  if (!LOGOS[brand]) {
+    throw new Error('brand sconosciuto: "' + brand + '". Ammessi: ' + Object.keys(LOGOS).join(', '));
+  }
+  const set = LOGOS[brand];
   let color = (cfg.logo || 'auto').toLowerCase();
   const localImage = !/^https?:/i.test(String(cfg.image || ''));
   if (color !== 'white' && color !== 'black') {
@@ -130,6 +140,17 @@ async function render(cfg) {
     const p = await b.newPage({ viewport: { width: W, height: Hh }, deviceScaleFactor: 2 });
     await p.goto('file://' + hp, { waitUntil: 'load' });
     await p.waitForTimeout(localImage ? 700 : 3500);
+    // La foto e disegnata come sfondo CSS: se Chromium non sa decodificarla
+    // (un HEIC, per esempio) non protesta, dipinge il fondo nero e la card esce
+    // "riuscita". La sonda e un'immagine invisibile con la stessa sorgente:
+    // naturalWidth a zero vuol dire che non e stata caricata.
+    const larghezzaFoto = await p.evaluate(function () {
+      var s = document.getElementById('sonda');
+      return s ? s.naturalWidth : -1;
+    });
+    if (larghezzaFoto === 0) {
+      throw new Error('foto non decodificabile dal browser: ' + String(cfg.image) + '. Senza questo controllo uscirebbe una card col fondo nero. Serve un JPEG, PNG o WebP.');
+    }
     const png = await p.screenshot({ clip: { x: 0, y: 0, width: W, height: Hh } });
     const jpg = await sharp(png).resize(W, Hh, { kernel: 'lanczos3' }).sharpen({ sigma: 1.2, m1: 0, m2: 1.0 }).jpeg({ quality: 92 }).toBuffer();
     return jpg;
