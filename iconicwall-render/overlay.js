@@ -5,7 +5,7 @@
 // foto, si compone su fondo trasparente e si sovrappone alla clip con dissolvenza
 // propria, che entra ed esce mentre la scena continua a muoversi.
 //
-// Gli asset sono quelli veri: font Italiana da assets/, logo PNG da assets/.
+// Gli asset sono quelli veri: font Italiana da assets/, logo da assets/.
 // Nessun testo scritto a mano al posto del logo, nessun font di ripiego:
 // sono esattamente i due errori registrati in "reel-branding-lezioni".
 
@@ -22,9 +22,11 @@ const LOGOS = {
     white: path.join(ASSETS, 'iconicwall-logo-white.png'),
     black: path.join(ASSETS, 'iconicwall-logo-black.png'),
   },
+  // SVG e non PNG: qui il logo si disegna a 420 px nella card di chiusura, e il
+  // PNG che stava al suo posto perdeva la riga «dress your interiors».
   iconic: {
-    white: path.join(ASSETS, 'iconic-logo-white.png'),
-    black: path.join(ASSETS, 'iconic-logo-black.png'),
+    white: path.join(ASSETS, 'iconic-logo-white.svg'),
+    black: path.join(ASSETS, 'iconic-logo-black.svg'),
   },
 };
 
@@ -168,7 +170,13 @@ async function componiTipografia(scene, card, opzioni) {
   const H = opzioni.altezza || 1920;
   const cartella = opzioni.cartella;
   const brand = String(opzioni.brand || 'iconicwall').toLowerCase();
-  const set = LOGOS[brand] || LOGOS.iconicwall;
+  // Come in render.js: un brand sconosciuto si ferma, non ripiega. Un reel
+  // sbagliato costa piu di una card sbagliata, perche lo si scopre a montaggio
+  // finito.
+  if (!LOGOS[brand]) {
+    throw new Error('brand sconosciuto: "' + brand + '". Ammessi: ' + Object.keys(LOGOS).join(', '));
+  }
+  const set = LOGOS[brand];
   const logoPath = set[String(opzioni.logo || 'white').toLowerCase()] || set.white;
 
   const serve = (scene || []).some(s => s && (s.titolo || s.occhiello || s.sotto)) || !!card;
