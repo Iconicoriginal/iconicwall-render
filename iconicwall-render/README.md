@@ -25,16 +25,20 @@ n8n lo chiama via HTTP, riceve il JPEG, e lo carica su Drive. Gira in cloud, PC 
 Regole titolo/accento identiche a quelle fissate in Notion: una frase per riga (`<br>` a fine frase),
 parola-perno in `<span class="accent">…</span>` dentro `title1`, niente campo `accent` separato.
 
-### Layout a due foto (Iconic e IconicDress)
-Con `layout` nel `config` il render compone un prima/dopo e risponde con un **PNG 1080×1350**
-(`image/png`, `grafica.png`). Senza `layout` vale il layout storico qui sopra, invariato.
+### Layout Iconic (template v3) e IconicDress
+Con `layout` nel `config` il render risponde con un **PNG 1080×1350** (`image/png`, `grafica.png`).
+Senza `layout` vale il layout storico qui sopra, invariato. Specifica: Notion «Iconic — Template grafica post v3».
 
-- **Body multipart**: `imageBefore` e `imageAfter` (JPEG, PNG o WebP) + `config`.
-- `brand: "iconic"`, `layout: "prima_dopo"`: split verticale (prima a sinistra, dopo a destra) con cucitura oro,
-  chip PRIMA/DOPO, banda Paper in basso con eyebrow, filetto, titolo, logo ICONIC nero e sito.
-- `brand: "iconicdress"`, `layout: "diagonale"`: taglio diagonale oro (prima in alto a sinistra, dopo in basso
-  a destra), firma con logo IconicDress e logo 3M DI-NOC, sito `riqualificazione.iconicoriginal.it`.
-  Per `iconicdress` il campo `layout` è obbligatorio.
+| brand | layout | file multipart | campi propri del config |
+|---|---|---|---|
+| `iconic` | `prima_dopo` | `imageBefore`, `imageAfter` | `focusBefore`, `focusAfter`, `seam` |
+| `iconic` | `stat` | `photo` (facoltativa: fondo scuro velato) | `stat` e `statFonte` **obbligatori**, `statLabel`, `statSize`, `focus` |
+| `iconic` | `campionario` | `finiture` × 4, 6 o 9 | `codici` (uno per finitura, stesso ordine) |
+| `iconic` | `contract` | `photo` | `indice` **obbligatorio** (1-99 → «N° 0X»), `focus` |
+| `iconic` | `confronto` | nessuno | `chips` (max 4), `barrato` (default Sostituire), `vivo` (default Rivestire) |
+| `iconicdress` | `diagonale` | `imageBefore`, `imageAfter` | `focusBefore`, `focusAfter`, `diagonal`, `seam` |
+
+Per `iconicdress` il campo `layout` è obbligatorio.
 
 ```json
 {
@@ -48,21 +52,27 @@ Con `layout` nel `config` il render compone un prima/dopo e risponde con un **PN
 }
 ```
 
-- Titolo: stessa convenzione del layout storico (`<br>`, `<span class="accent">` oppure «»). Se c'è `accent` e nel
-  titolo non è marcato niente, si colora quella parola dentro il titolo (o va a capo, se non c'è). Al massimo
-  **due righe** e **una sola** parola in oro, altrimenti 400. Il punto finale si toglie. Il corpo parte da `size`
-  (default 76) e scende finché il titolo ci sta.
-- `focusBefore` / `focusAfter`: punto focale del ritaglio, percentuali x,y (`"40,60"`, `[40,60]` o `{x,y}`), default 50/50.
+- Titolo (`title1`, obbligatorio tranne che in `confronto`): stessa convenzione del layout storico (`<br>`,
+  `<span class="accent">` oppure «»). Se c'è `accent` e nel titolo non è marcato niente, si colora quella parola dentro
+  il titolo (o va a capo, se non c'è). Al massimo **due righe** e **una sola** parola in oro, altrimenti 400. Il punto
+  finale si toglie. Il corpo parte da `size` e scende finché il titolo ci sta.
+- `focus`, `focusBefore`, `focusAfter`: punto focale del ritaglio, percentuali x,y (`"40,60"`, `[40,60]` o `{x,y}`),
+  default 50/50.
+- `stat`: solo numeri veri e verificati (Linea Editoriale Iconic). Il render non può controllarli, per questo pretende
+  `statFonte` (da dove viene il numero; non si stampa): senza, 400.
+- `confronto`: nessuna parola di denaro (costi, costo, euro, €, prezzo, risparmio, spesa, budget…) in titolo, eyebrow,
+  parole e chips: 400. Il vecchio chip «meno costi» non passa.
 - `diagonal` (solo `diagonale`): dove la linea tocca il bordo alto e il bordo basso della foto, in percentuale della
   larghezza, `"alto,basso"`. Default `"100,0"`, da angolo ad angolo.
-- `seam`: `"chiaro"` o `"scuro"` per forzare il colore della cucitura; di norma lo sceglie la luminosità delle foto
-  (`#A67C3C` su foto chiare, `#C9A578` su foto scure).
-- Layout Iconic `stat`, `campionario`, `contract`, `confronto`: non ancora disponibili, oggi rispondono 400.
+- `seam`: `"chiaro"` o `"scuro"` per forzare il colore della cucitura; di norma lo sceglie la luminosità delle foto.
+- Le finiture del campionario non ricevono il trattamento foto: restano col colore del campione.
 
 ### Errori
 `400` con il motivo nel testo quando: il brand non è fra `iconicwall`, `iconic`, `iconicdress`; il layout non esiste
 per quel brand; manca una foto; una foto non è JPEG/PNG/WebP (un HEIC, per esempio); `config` non è JSON; il titolo
-ha più di due righe o più di una parola in oro. Nessun ripiego silenzioso.
+ha più di due righe o più di una parola in oro; mancano i campi obbligatori del layout. Nessun ripiego silenzioso.
+
+`POST /reel` risponde 400 (non 500) con brand sconosciuto o `config` non JSON, prima di montare.
 
 `GET /health` → `ok`
 

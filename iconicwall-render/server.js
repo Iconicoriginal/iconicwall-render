@@ -7,6 +7,7 @@ const { render } = require('./render');
 const { renderLayout } = require('./layouts');
 const { RichiestaNonValida, marchioDi, layoutDi, verificaFoto } = require('./verifiche');
 const { montaReel, cartellaTemporanea, pulisci } = require('./reel');
+const { LOGOS: LOGHI_REEL } = require('./overlay');
 
 const upload = multer({ dest: os.tmpdir() });
 const app = express();
@@ -23,9 +24,10 @@ app.get('/health', (req, res) => res.send('ok'));
 // alternativa "config" può essere un JSON string con tutti i campi (image = URL
 // http). Risponde con il JPEG, come sempre.
 //
-// Layout a due foto (cfg.layout = "prima_dopo" per iconic, "diagonale" per
-// iconicdress): campi file "imageBefore" e "imageAfter" + "config". Risponde
-// con il PNG 1080×1350.
+// Layout del template Iconic v3 e di IconicDress (cfg.layout presente):
+// "config" + i file che il layout chiede. prima_dopo e diagonale: "imageBefore"
+// e "imageAfter"; stat: "photo" facoltativa; contract: "photo"; campionario:
+// "finiture" (4, 6 o 9); confronto: nessuna foto. Risponde con il PNG 1080×1350.
 //
 // Brand sconosciuto, layout sconosciuto, foto mancante o non decodificabile
 // (un HEIC, per esempio): 400 con il motivo, mai un ripiego.
@@ -33,6 +35,7 @@ const campiFoto = upload.fields([
   { name: 'photo', maxCount: 1 },
   { name: 'imageBefore', maxCount: 1 },
   { name: 'imageAfter', maxCount: 1 },
+  { name: 'finiture', maxCount: 9 },
 ]);
 
 app.post('/render', campiFoto, async (req, res) => {
@@ -60,13 +63,20 @@ app.post('/render', campiFoto, async (req, res) => {
       return res.send(buf);
     }
 
-    const before = primo('imageBefore'), after = primo('imageAfter');
-    if (!before || !after) {
-      throw new RichiestaNonValida('il layout "' + layout + '" vuole due foto: campi file "imageBefore" e "imageAfter".');
+    // Ogni layout dice quali foto gli servono (layouts.js); qui si controlla
+    // che quelle arrivate siano disegnabili, prima di aprire Chromium.
+    const files = {
+      before: primo('imageBefore'), after: primo('imageAfter'), photo: primo('photo'),
+      finiture: (req.files && req.files.finiture) || [],
+    };
+    for (const campo of ['before', 'after', 'photo']) {
+      if (files[campo]) await verificaFoto(files[campo].path, files[campo].fieldname);
     }
-    await verificaFoto(before.path, 'imageBefore');
-    await verificaFoto(after.path, 'imageAfter');
-    const png = await renderLayout(cfg, layout, { before: before.path, after: after.path });
+    for (let i = 0; i < files.finiture.length; i++) await verificaFoto(files.finiture[i].path, 'finiture[' + i + ']');
+    const png = await renderLayout(cfg, layout, {
+      before: files.before && files.before.path, after: files.after && files.after.path,
+      photo: files.photo && files.photo.path, finiture: files.finiture.map(f => f.path),
+    });
     res.set('Content-Type', 'image/png');
     res.set('Content-Disposition', 'inline; filename="grafica.png"');
     res.send(png);
@@ -102,7 +112,15 @@ app.post('/reel', upload.fields([
     if (!clips.length) return res.status(400).send('mancano le clip video (campo file "clips")');
 
     let cfg = {};
-    if (req.body && req.body.config) cfg = JSON.parse(req.body.config);
+    if (req.body && req.body.config) {
+      try { cfg = JSON.parse(req.body.config); } catch (e) { throw new RichiestaNonValida('config non è un JSON valido: ' + e.message); }
+    }
+    // Il marchio si controlla prima di montare: un brand sconosciuto è un errore
+    // di chi chiama (400), e scoprirlo dopo un minuto di ffmpeg non serve a nessuno.
+    const brandReel = String(cfg.brand || 'iconicwall').trim().toLowerCase();
+    if (!LOGHI_REEL[brandReel]) {
+      throw new RichiestaNonValida('brand sconosciuto: "' + brandReel + '". Ammessi per il reel: ' + Object.keys(LOGHI_REEL).join(', '));
+    }
     if (musica) cfg.audio = musica.path;
 
     cartella = cartellaTemporanea();
@@ -112,7 +130,7 @@ app.post('/reel', upload.fields([
     res.set('Content-Disposition', 'attachment; filename="reel.mp4"');
     res.send(buf);
   } catch (e) {
-    res.status(500).send('reel error: ' + (e && e.message ? e.message : String(e)));
+    res.status(e && e.status === 400 ? 400 : 500).send('reel error: ' + (e && e.message ? e.message : String(e)));
   } finally {
     if (cartella) pulisci(cartella);
     temporanei.forEach(p => fs.unlink(p, () => {}));
