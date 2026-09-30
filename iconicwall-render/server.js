@@ -4,6 +4,8 @@ const multer = require('multer');
 const os = require('os');
 const fs = require('fs');
 const { render } = require('./render');
+const { renderLayout } = require('./layouts');
+const { RichiestaNonValida, marchioDi, layoutDi, verificaFoto } = require('./verifiche');
 const { montaReel, cartellaTemporanea, pulisci } = require('./reel');
 
 const upload = multer({ dest: os.tmpdir() });
@@ -14,24 +16,65 @@ const KEY = (process.env.RENDER_KEY || '').trim();
 
 app.get('/health', (req, res) => res.send('ok'));
 
-// Campo file "photo" (la foto reale, inviata da n8n come binario) + campi testo del post.
-// In alternativa "config" può essere un JSON string con tutti i campi (image = URL http).
-app.post('/render', upload.single('photo'), async (req, res) => {
+// Due modi di chiamare /render.
+//
+// Layout storico (cfg.layout assente, IconicWall e Iconic): campo file "photo"
+// (la foto reale, inviata da n8n come binario) + campi testo del post. In
+// alternativa "config" può essere un JSON string con tutti i campi (image = URL
+// http). Risponde con il JPEG, come sempre.
+//
+// Layout a due foto (cfg.layout = "prima_dopo" per iconic, "diagonale" per
+// iconicdress): campi file "imageBefore" e "imageAfter" + "config". Risponde
+// con il PNG 1080×1350.
+//
+// Brand sconosciuto, layout sconosciuto, foto mancante o non decodificabile
+// (un HEIC, per esempio): 400 con il motivo, mai un ripiego.
+const campiFoto = upload.fields([
+  { name: 'photo', maxCount: 1 },
+  { name: 'imageBefore', maxCount: 1 },
+  { name: 'imageAfter', maxCount: 1 },
+]);
+
+app.post('/render', campiFoto, async (req, res) => {
+  const caricati = [];
+  Object.values(req.files || {}).forEach(l => l.forEach(f => caricati.push(f.path)));
+  const primo = (campo) => (req.files && req.files[campo] && req.files[campo][0]) || null;
   try {
     if (KEY && ((req.header('x-render-key') || req.header('x-api-key') || '').trim() !== KEY)) return res.status(401).send('unauthorized');
     let cfg = {};
-    if (req.body && req.body.config) cfg = JSON.parse(req.body.config);
-    else cfg = Object.assign({}, req.body);
-    if (req.file) cfg.image = req.file.path;           // foto caricata da n8n
-    if (!cfg.image) return res.status(400).send('manca la foto (campo file "photo") o cfg.image (URL)');
-    const buf = await render(cfg);
-    res.set('Content-Type', 'image/jpeg');
-    res.set('Content-Disposition', 'inline; filename="post.jpg"');
-    res.send(buf);
+    if (req.body && req.body.config) {
+      try { cfg = JSON.parse(req.body.config); } catch (e) { throw new RichiestaNonValida('config non è un JSON valido: ' + e.message); }
+    } else cfg = Object.assign({}, req.body);
+
+    const brand = marchioDi(cfg);
+    const layout = layoutDi(cfg, brand);
+
+    if (layout === 'classico') {
+      const photo = primo('photo');
+      if (photo) cfg.image = photo.path;               // foto caricata da n8n
+      if (!cfg.image) return res.status(400).send('manca la foto (campo file "photo") o cfg.image (URL)');
+      if (photo) await verificaFoto(photo.path, 'photo');
+      const buf = await render(cfg);
+      res.set('Content-Type', 'image/jpeg');
+      res.set('Content-Disposition', 'inline; filename="post.jpg"');
+      return res.send(buf);
+    }
+
+    const before = primo('imageBefore'), after = primo('imageAfter');
+    if (!before || !after) {
+      throw new RichiestaNonValida('il layout "' + layout + '" vuole due foto: campi file "imageBefore" e "imageAfter".');
+    }
+    await verificaFoto(before.path, 'imageBefore');
+    await verificaFoto(after.path, 'imageAfter');
+    const png = await renderLayout(cfg, layout, { before: before.path, after: after.path });
+    res.set('Content-Type', 'image/png');
+    res.set('Content-Disposition', 'inline; filename="grafica.png"');
+    res.send(png);
   } catch (e) {
-    res.status(500).send('render error: ' + (e && e.message ? e.message : String(e)));
+    const status = e && e.status === 400 ? 400 : 500;
+    res.status(status).send('render error: ' + (e && e.message ? e.message : String(e)));
   } finally {
-    if (req.file) fs.unlink(req.file.path, () => {});
+    caricati.forEach(p => fs.unlink(p, () => {}));
   }
 });
 
