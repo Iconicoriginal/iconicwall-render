@@ -4,6 +4,7 @@ const sharp = require('sharp');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { RichiestaNonValida } = require('./verifiche');
 
 const HERE = __dirname;
 const ASSETS = path.join(HERE, 'assets');
@@ -120,9 +121,9 @@ async function render(cfg) {
   // Un brand sconosciuto NON ripiega. Ripiegando in silenzio, per tre settimane
   // ogni card Iconic Original e uscita col logo IconicWall senza che nessuno se
   // ne accorgesse: chi chiamava mandava 'iconicoriginal', chiave inesistente.
-  // Meglio un 500 che una card bella e sbagliata.
+  // Meglio un 400 che una card bella e sbagliata.
   if (!LOGOS[brand]) {
-    throw new Error('brand sconosciuto: "' + brand + '". Ammessi: ' + Object.keys(LOGOS).join(', '));
+    throw new RichiestaNonValida('brand sconosciuto: "' + brand + '". Ammessi: ' + Object.keys(LOGOS).join(', '));
   }
   const set = LOGOS[brand];
   let color = (cfg.logo || 'auto').toLowerCase();
@@ -149,7 +150,7 @@ async function render(cfg) {
       return s ? s.naturalWidth : -1;
     });
     if (larghezzaFoto === 0) {
-      throw new Error('foto non decodificabile dal browser: ' + String(cfg.image) + '. Senza questo controllo uscirebbe una card col fondo nero. Serve un JPEG, PNG o WebP.');
+      throw new RichiestaNonValida('foto non decodificabile dal browser: ' + String(cfg.image) + '. Senza questo controllo uscirebbe una card col fondo nero. Serve un JPEG, PNG o WebP.');
     }
     const png = await p.screenshot({ clip: { x: 0, y: 0, width: W, height: Hh } });
     const jpg = await sharp(png).resize(W, Hh, { kernel: 'lanczos3' }).sharpen({ sigma: 1.2, m1: 0, m2: 1.0 }).jpeg({ quality: 92 }).toBuffer();
