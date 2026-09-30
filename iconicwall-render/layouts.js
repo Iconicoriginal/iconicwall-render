@@ -151,6 +151,14 @@ window.adatta = function (maxAltezza, minimo) {
   }
   return { size: size, larghezza: larga(), box: box, altezza: h.getBoundingClientRect().height };
 };
+// Per la statistica e le parole del confronto: una riga sola, larga al massimo maxW.
+window.adattaRiga = function (id, maxW, minimo) {
+  var e = document.getElementById(id);
+  if (!e) return null;
+  var size = parseFloat(e.style.fontSize);
+  while (size > minimo && e.scrollWidth > maxW) { size -= 2; e.style.fontSize = size + 'px'; }
+  return size;
+};
 </script>`;
 
 // --- prima_dopo (Iconic) -------------------------------------------------
@@ -226,32 +234,237 @@ function htmlDiagonale(cfg, foto, cucitura, righe) {
 </div></body></html>`;
 }
 
+// --- Controlli di testo condivisi dai quattro layout del 30/09 -----------
+const LOGO_ICONIC_BIANCO = path.join(ASSETS, 'iconic-logo-white.svg');
+const ORO = '#C9A578', ORO_ACCENTO_SCURO = '#D8B486', CHIARO = '#EDE7DB';
+
+function testoObbligatorio(cfg, campo, spiegazione) {
+  const v = String(cfg[campo] == null ? '' : cfg[campo]).trim();
+  if (!v) throw new RichiestaNonValida('manca ' + campo + ': ' + spiegazione);
+  return v;
+}
+
+// Elenco di voci: array oppure stringa separata da · , | o a capo.
+function elenco(valore) {
+  if (valore == null || valore === '') return [];
+  const voci = Array.isArray(valore) ? valore : String(valore).split(/[·,|\n]/);
+  return voci.map(v => String(v).trim()).filter(Boolean);
+}
+
+// Linea Editoriale Iconic: nei testi a nome di Yuri nessuna parola di denaro.
+// Nel confronto il chip storico «meno costi» è vietato: lo si ferma qui.
+const PAROLE_DENARO = /\b(cost[oiae]?|costare|costerebbe|euro|prezz[oi]|soldi|risparmi\w*|economic\w*|spes[ae]|budget)\b|€/i;
+function senzaDenaro(testi) {
+  testi.forEach(t => {
+    const pulito = String(t || '').replace(/<[^>]+>/g, ' ');
+    const m = pulito.match(PAROLE_DENARO);
+    if (m) throw new RichiestaNonValida('parola di denaro non ammessa nei testi del confronto: «' + m[0] + '» (Linea Editoriale Iconic).');
+  });
+}
+
+function cssScuro() {
+  return `.canvas{background:${INK};}
+h1{color:${PAPER};} h1 .accent{color:${ORO_ACCENTO_SCURO};}
+.eyebrow{color:${ORO};} .rule{background:${ORO};}
+.site{color:${CHIARO};opacity:.9;}`;
+}
+
+// --- stat (Downtime zero) ------------------------------------------------
+// Scuro cinematografico, statistica gigante in oro, titolo sotto. La foto è
+// facoltativa: se c'è, fa da fondo molto velato. Il numero deve essere vero:
+// il render non lo può verificare, ma pretende che chi chiama dica da dove
+// viene (statFonte), così un numero senza fonte non esce.
+async function prepStat(cfg, files) {
+  const stat = testoObbligatorio(cfg, 'stat', 'la statistica da mostrare in grande (es. "0").');
+  if (stat.length > 8) throw new RichiestaNonValida('stat troppo lunga ("' + stat + '"): è un numero, al massimo 8 caratteri.');
+  testoObbligatorio(cfg, 'statFonte', 'da dove viene il numero (cantiere, documento). Solo numeri veri e verificati (Linea Editoriale Iconic).');
+  return { stat, foto: files.photo || null, focus: focus(cfg.focus, 'focus') };
+}
+
+function htmlStat(cfg, ctx, righe) {
+  const site = cfg.site != null ? cfg.site : SITI.iconic;
+  const fondo = ctx.foto
+    ? `<div class="foto fondo"><img src="${fileUrl(ctx.foto)}" style="object-position:${ctx.focus.x}% ${ctx.focus.y}%"></div><div class="scuro"></div>`
+    : `<div class="scuro vuoto"></div>`;
+  const css = cssBase(cssScuro() + `
+.fondo{inset:0;}
+.fondo img{filter:${FILTRO_FOTO} brightness(.8);}
+.scuro{position:absolute;inset:0;background:linear-gradient(180deg, rgba(17,17,15,.72) 0%, rgba(17,17,15,.6) 40%, rgba(12,11,10,.94) 78%, rgba(12,11,10,.98) 100%);}
+.scuro.vuoto{background:radial-gradient(90% 60% at 30% 38%, rgba(201,165,120,.12) 0%, rgba(17,17,15,0) 70%);}
+.logo{position:absolute;top:72px;left:72px;width:200px;}
+.blocco-stat{position:absolute;left:72px;right:72px;top:210px;}
+.stat{font-family:'Italiana',serif;font-weight:400;color:${ORO};line-height:.86;white-space:nowrap;letter-spacing:-.01em;}
+.stat-label{font-family:${SANS};font-size:28px;font-weight:700;letter-spacing:.26em;text-transform:uppercase;color:${CHIARO};margin-top:22px;}
+.testo{bottom:150px;}
+.site{position:absolute;right:72px;bottom:72px;}`);
+  const label = cfg.statLabel ? `<div class="stat-label">${esc(cfg.statLabel)}</div>` : '';
+  return `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><style>${css}</style>${SCRIPT_ADATTA}</head><body>
+<div class="canvas">${fondo}
+<img class="logo" src="${fileUrl(LOGO_ICONIC_BIANCO)}">
+<div class="blocco-stat"><div class="stat" id="stat" style="font-size:${Number(cfg.statSize) || 560}px">${esc(ctx.stat)}</div>${label}</div>
+<div class="testo">${htmlTesto(cfg, righe, Number(cfg.size) || 80)}</div>
+${site ? `<div class="site">${esc(site)}</div>` : ''}
+</div></body></html>`;
+}
+
+// --- campionario (Campionario 3M DI-NOC) --------------------------------
+// Mosaico di finiture con fughe d'oro, card titolo su Paper sovrapposta al
+// mosaico. Le finiture arrivano come file (campo "finiture", 4, 6 o 9): la
+// griglia è sempre piena, niente caselle vuote. I colori delle finiture non
+// si trattano: devono restare quelli del campione.
+const GRIGLIE = { 4: { col: 2, rig: 2 }, 6: { col: 3, rig: 2 }, 9: { col: 3, rig: 3 } };
+
+async function prepCampionario(cfg, files) {
+  const finiture = files.finiture || [];
+  const g = GRIGLIE[finiture.length];
+  if (!g) throw new RichiestaNonValida('il campionario vuole 4, 6 o 9 finiture (campo file "finiture"): ne sono arrivate ' + finiture.length + '.');
+  const codici = elenco(cfg.codici);
+  if (codici.length && codici.length !== finiture.length) {
+    throw new RichiestaNonValida('codici: ne servono ' + finiture.length + ', uno per finitura nello stesso ordine; ne sono arrivati ' + codici.length + '.');
+  }
+  return { finiture, codici, griglia: g };
+}
+
+function htmlCampionario(cfg, ctx, righe) {
+  const site = cfg.site != null ? cfg.site : SITI.iconic;
+  const mosaicoH = 990, gap = 3;
+  const tessere = ctx.finiture.map((f, i) => `<div class="tessera"><img src="${fileUrl(f)}">${ctx.codici[i] ? `<span class="codice">${esc(ctx.codici[i])}</span>` : ''}</div>`).join('');
+  const css = cssBase(`
+.mosaico{position:absolute;left:0;top:0;width:${W}px;height:${mosaicoH}px;display:grid;grid-template-columns:repeat(${ctx.griglia.col},1fr);grid-template-rows:repeat(${ctx.griglia.rig},1fr);gap:${gap}px;background:${ORO_STRUTTURA};border-bottom:${gap}px solid ${ORO_STRUTTURA};}
+.tessera{position:relative;overflow:hidden;}
+.tessera img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+.codice{position:absolute;left:18px;top:18px;font-family:${SANS};font-size:15px;font-weight:700;letter-spacing:.18em;color:${PAPER};background:rgba(17,17,15,.8);padding:7px 11px;border-radius:2px;}
+.card{position:absolute;left:72px;right:72px;top:${mosaicoH - 180}px;bottom:72px;background:${PAPER};box-shadow:0 18px 50px rgba(17,17,15,.28);border-top:3px solid ${ORO_STRUTTURA};}
+.card .testo{left:56px;right:56px;top:46px;}
+.card .firma{left:56px;right:56px;bottom:40px;}
+.logo{height:58px;display:block;}
+.dx{display:flex;flex-direction:column;align-items:flex-end;gap:12px;}
+.logo-3m{height:22px;display:block;}
+.site{font-size:16px;letter-spacing:.18em;}`);
+  return `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><style>${css}</style>${SCRIPT_ADATTA}</head><body>
+<div class="canvas"><div class="mosaico">${tessere}</div>
+<div class="card"><div class="testo">${htmlTesto(cfg, righe, Number(cfg.size) || 72)}</div>
+<div class="firma"><img class="logo" src="${fileUrl(LOGO_ICONIC_NERO)}"><div class="dx"><img class="logo-3m" src="${fileUrl(LOGO_3M)}">${site ? `<div class="site">${esc(site)}</div>` : ''}</div></div></div>
+</div></body></html>`;
+}
+
+// --- contract (Contract / scala) ----------------------------------------
+// Foto architettonica a tutto campo, rail d'oro verticale a sinistra con
+// l'eyebrow ruotato lungo il rail, indice «N° 0X» in alto a destra.
+async function prepContract(cfg, files) {
+  if (!files.photo) throw new RichiestaNonValida('il layout "contract" vuole una foto: campo file "photo".');
+  const n = Number(String(cfg.indice == null ? '' : cfg.indice).trim());
+  if (!Number.isInteger(n) || n < 1 || n > 99) {
+    throw new RichiestaNonValida('indice non valido: serve un intero fra 1 e 99 (diventa «N° 0X»).');
+  }
+  return { foto: files.photo, focus: focus(cfg.focus, 'focus'), indice: String(n).padStart(2, '0') };
+}
+
+function htmlContract(cfg, ctx, righe) {
+  const site = cfg.site != null ? cfg.site : SITI.iconic;
+  const css = cssBase(cssScuro() + `
+.fondo{inset:0;}
+.velo{position:absolute;inset:0;background:linear-gradient(180deg, rgba(17,17,15,.45) 0%, rgba(17,17,15,0) 26%, rgba(17,17,15,0) 46%, rgba(17,17,15,.62) 70%, rgba(12,11,10,.94) 100%), linear-gradient(90deg, rgba(17,17,15,.62) 0%, rgba(17,17,15,.2) 14%, rgba(17,17,15,0) 32%);}
+.rail{position:absolute;left:96px;top:96px;bottom:96px;width:4px;background:${ORO};}
+.eyebrow-rail{position:absolute;left:44px;top:96px;writing-mode:vertical-rl;transform:rotate(180deg);font-family:${SANS};font-size:20px;font-weight:700;letter-spacing:.34em;text-transform:uppercase;color:${ORO};white-space:nowrap;height:${H - 192}px;text-align:right;}
+.logo{position:absolute;top:92px;left:140px;width:200px;filter:drop-shadow(0 2px 12px rgba(0,0,0,.5));}
+.indice{position:absolute;top:78px;right:72px;font-family:'Italiana',serif;color:${ORO};font-size:96px;line-height:1;text-shadow:0 2px 18px rgba(0,0,0,.45);}
+.indice small{font-size:44px;margin-right:10px;vertical-align:18px;}
+.testo{left:140px;bottom:150px;}
+h1{text-shadow:0 2px 24px rgba(0,0,0,.55);}
+.site{position:absolute;left:140px;bottom:96px;line-height:1;}`);
+  const eyebrow = cfg.eyebrow ? `<div class="eyebrow-rail">${esc(cfg.eyebrow)}</div>` : '';
+  const righeTesto = `<div class="rule"></div><h1 id="titolo" style="font-size:${Number(cfg.size) || 80}px">${righe.map(r => `<span class="riga">${r}</span>`).join('')}</h1>`;
+  return `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><style>${css}</style>${SCRIPT_ADATTA}</head><body>
+<div class="canvas">
+<div class="foto fondo"><img src="${fileUrl(ctx.foto)}" style="object-position:${ctx.focus.x}% ${ctx.focus.y}%"></div><div class="velo"></div>
+<div class="rail"></div>${eyebrow}
+<img class="logo" src="${fileUrl(LOGO_ICONIC_BIANCO)}">
+<div class="indice"><small>N°</small>${ctx.indice}</div>
+<div class="testo">${righeTesto}</div>
+${site ? `<div class="site">${esc(site)}</div>` : ''}
+</div></body></html>`;
+}
+
+// --- confronto (Perché conviene) ----------------------------------------
+// Solo tipografia: SOSTITUIRE barrato d'oro, RIVESTIRE vivo, chip dei vantaggi.
+// Niente paragoni con altri operatori e nessuna parola di denaro: «meno costi»
+// non si scrive (nota ⚠️ del template v3), il render lo rifiuta.
+async function prepConfronto(cfg) {
+  const barrato = String(cfg.barrato || 'Sostituire').trim();
+  const vivo = String(cfg.vivo || 'Rivestire').trim();
+  const chips = elenco(cfg.chips);
+  if (chips.length > 4) throw new RichiestaNonValida('chips: al massimo 4, ne sono arrivati ' + chips.length + '.');
+  senzaDenaro([cfg.title1, cfg.accent, cfg.eyebrow, barrato, vivo].concat(chips));
+  return { barrato, vivo, chips };
+}
+
+function htmlConfronto(cfg, ctx, righe) {
+  const site = cfg.site != null ? cfg.site : SITI.iconic;
+  const css = cssBase(`
+.logo{position:absolute;top:72px;left:72px;height:62px;}
+.site{position:absolute;right:72px;top:96px;}
+.testo{top:50%;transform:translateY(-44%);}
+.parola{font-family:'Italiana',serif;font-weight:400;text-transform:uppercase;letter-spacing:.04em;line-height:1.05;white-space:nowrap;}
+.barrato{color:rgba(17,17,15,.34);text-decoration:line-through;text-decoration-color:${ORO_STRUTTURA};text-decoration-thickness:6px;}
+.vivo{color:${INK};margin-top:6px;}
+.titolo-confronto{margin-top:64px;}
+.chips{display:flex;flex-wrap:wrap;gap:14px;margin-top:56px;}
+.chip-v{font-family:${SANS};font-size:19px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:${INK};border:1.5px solid ${ORO_STRUTTURA};padding:14px 20px 13px 23px;border-radius:2px;line-height:1;}`);
+  const eyebrow = cfg.eyebrow ? `<div class="eyebrow">${esc(cfg.eyebrow)}</div>` : '';
+  const titolo = righe.length
+    ? `<h1 id="titolo" class="titolo-confronto" style="font-size:${Number(cfg.size) || 64}px">${righe.map(r => `<span class="riga">${r}</span>`).join('')}</h1>`
+    : '';
+  const chips = ctx.chips.length ? `<div class="chips">${ctx.chips.map(c => `<span class="chip-v">${esc(c)}</span>`).join('')}</div>` : '';
+  return `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><style>${css}</style>${SCRIPT_ADATTA}</head><body>
+<div class="canvas">
+<img class="logo" src="${fileUrl(LOGO_ICONIC_NERO)}">${site ? `<div class="site">${esc(site)}</div>` : ''}
+<div class="testo">${eyebrow}<div class="rule"></div>
+<div class="parola barrato" id="barrato" style="font-size:170px">${esc(ctx.barrato)}</div>
+<div class="parola vivo" id="vivo" style="font-size:170px">${esc(ctx.vivo)}</div>
+${titolo}${chips}</div>
+</div></body></html>`;
+}
+
+// --- Registro dei layout -------------------------------------------------
+async function prepDueFoto(cfg, files, layout) {
+  if (!files.before || !files.after) {
+    throw new RichiestaNonValida('il layout "' + layout + '" vuole due foto: campi file "imageBefore" e "imageAfter".');
+  }
+  return {
+    foto: {
+      before: files.before,
+      after: files.after,
+      focusBefore: focus(cfg.focusBefore, 'focusBefore'),
+      focusAfter: focus(cfg.focusAfter, 'focusAfter'),
+      diagonal: taglio(cfg.diagonal),
+    },
+    cucitura: await coloreCucitura(files.before, files.after, String(cfg.seam || '').toLowerCase()),
+  };
+}
+
+// adatta: [altezza massima del titolo, e per le righe singole [id, larghezza]].
 const LAYOUT = {
-  prima_dopo: { html: htmlPrimaDopo, maxTitolo: 176 },
-  diagonale: { html: htmlDiagonale, maxTitolo: 184 },
+  prima_dopo: { prepara: prepDueFoto, html: (cfg, c, r) => htmlPrimaDopo(cfg, c.foto, c.cucitura, r), maxTitolo: 176 },
+  diagonale: { prepara: prepDueFoto, html: (cfg, c, r) => htmlDiagonale(cfg, c.foto, c.cucitura, r), maxTitolo: 184 },
+  stat: { prepara: prepStat, html: htmlStat, maxTitolo: 190, righe: [['stat', W - 144]] },
+  campionario: { prepara: prepCampionario, html: htmlCampionario, maxTitolo: 170 },
+  contract: { prepara: prepContract, html: htmlContract, maxTitolo: 190 },
+  confronto: { prepara: prepConfronto, html: htmlConfronto, maxTitolo: 150, titoloFacoltativo: true, righe: [['barrato', W - 144], ['vivo', W - 144]] },
 };
 
 /**
  * @param {object} cfg    configurazione (brand e layout già verificati)
- * @param {object} files  { before, after } percorsi locali delle due foto
+ * @param {string} layout nome del layout
+ * @param {object} files  percorsi locali: { before, after, photo, finiture: [] }
  * @returns {Promise<Buffer>} PNG 1080×1350
  */
 async function renderLayout(cfg, layout, files) {
   const def = LAYOUT[layout];
   if (!def) throw new RichiestaNonValida('layout sconosciuto: "' + layout + '"');
-  if (!files.before || !files.after) {
-    throw new RichiestaNonValida('il layout "' + layout + '" vuole due foto: campi file "imageBefore" e "imageAfter".');
-  }
-  const righe = componiTitolo(cfg);
-  const foto = {
-    before: files.before,
-    after: files.after,
-    focusBefore: focus(cfg.focusBefore, 'focusBefore'),
-    focusAfter: focus(cfg.focusAfter, 'focusAfter'),
-    diagonal: taglio(cfg.diagonal),
-  };
-  const cucitura = await coloreCucitura(files.before, files.after, String(cfg.seam || '').toLowerCase());
-  const html = def.html(cfg, foto, cucitura, righe);
+  const ctx = await def.prepara(cfg, files || {}, layout);
+  const righe = def.titoloFacoltativo && !String(cfg.title1 || '').trim() ? [] : componiTitolo(cfg);
+  const html = def.html(cfg, ctx, righe);
 
   const hp = path.join(os.tmpdir(), 'layout_' + process.pid + '_' + Math.floor(Math.random() * 1e9) + '.html');
   fs.writeFileSync(hp, html);
@@ -260,12 +473,16 @@ async function renderLayout(cfg, layout, files) {
     const p = await b.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 2 });
     await p.goto(fileUrl(hp), { waitUntil: 'load' });
     await p.evaluate(() => document.fonts.ready);
-    // Le due foto sono <img>: naturalWidth a zero vuol dire che il browser non le
-    // ha decodificate. verificaFoto le ha già controllate, questo è il paracadute.
-    const rotte = await p.evaluate(() => Array.from(document.querySelectorAll('.foto img'))
+    // Foto, finiture e loghi sono <img>: naturalWidth a zero vuol dire che il
+    // browser non li ha decodificati. verificaFoto ha già controllato i file
+    // arrivati, questo è il paracadute.
+    const rotte = await p.evaluate(() => Array.from(document.images)
       .filter(i => !i.complete || i.naturalWidth === 0).length);
     if (rotte) throw new RichiestaNonValida('foto non decodificabile dal browser. Serve un JPEG, PNG o WebP.');
-    await p.evaluate(({ max }) => window.adatta(max, 40), { max: def.maxTitolo });
+    for (const [id, maxW] of def.righe || []) {
+      await p.evaluate(({ id, maxW }) => window.adattaRiga(id, maxW, 60), { id, maxW });
+    }
+    if (righe.length) await p.evaluate(({ max }) => window.adatta(max, 40), { max: def.maxTitolo });
     const png = await p.screenshot({ clip: { x: 0, y: 0, width: W, height: H } });
     return await sharp(png).resize(W, H, { kernel: 'lanczos3' }).sharpen({ sigma: 1.2, m1: 0, m2: 1.0 }).png({ compressionLevel: 9 }).toBuffer();
   } finally {
@@ -274,4 +491,4 @@ async function renderLayout(cfg, layout, files) {
   }
 }
 
-module.exports = { renderLayout, componiTitolo, focus, LAYOUT };
+module.exports = { renderLayout, componiTitolo, focus, senzaDenaro, LAYOUT };

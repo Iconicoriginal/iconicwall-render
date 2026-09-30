@@ -20,13 +20,9 @@ class RichiestaNonValida extends Error {
 // storico di render.js (una foto, titolo sulla foto): vale quando cfg.layout manca.
 const MARCHI = {
   iconicwall: ['classico'],
-  iconic: ['classico', 'prima_dopo'],
+  iconic: ['classico', 'prima_dopo', 'stat', 'campionario', 'contract', 'confronto'],
   iconicdress: ['diagonale'],
 };
-
-// Layout del template Iconic v3 approvati il 09/08 ma non ancora costruiti:
-// chiederli dà un 400 esplicito, non un ripiego su un altro layout.
-const IN_ARRIVO = { iconic: ['stat', 'campionario', 'contract', 'confronto'] };
 
 function marchioDi(cfg) {
   const brand = String((cfg && cfg.brand) || 'iconicwall').trim().toLowerCase();
@@ -46,9 +42,6 @@ function layoutDi(cfg, brand) {
     return 'classico';
   }
   if (ammessi.indexOf(grezzo) > -1) return grezzo;
-  if ((IN_ARRIVO[brand] || []).indexOf(grezzo) > -1) {
-    throw new RichiestaNonValida('layout "' + grezzo + '" per "' + brand + '" non ancora disponibile. Oggi: ' + ammessi.join(', '));
-  }
   throw new RichiestaNonValida('layout sconosciuto per "' + brand + '": "' + grezzo + '". Ammessi: ' + ammessi.join(', '));
 }
 

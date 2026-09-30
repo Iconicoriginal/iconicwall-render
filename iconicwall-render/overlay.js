@@ -12,6 +12,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
+const { RichiestaNonValida } = require('./verifiche');
 
 const HERE = __dirname;
 const ASSETS = path.join(HERE, 'assets');
@@ -174,7 +175,7 @@ async function componiTipografia(scene, card, opzioni) {
   // sbagliato costa piu di una card sbagliata, perche lo si scopre a montaggio
   // finito.
   if (!LOGOS[brand]) {
-    throw new Error('brand sconosciuto: "' + brand + '". Ammessi: ' + Object.keys(LOGOS).join(', '));
+    throw new RichiestaNonValida('brand sconosciuto: "' + brand + '". Ammessi: ' + Object.keys(LOGOS).join(', '));
   }
   const set = LOGOS[brand];
   const logoPath = set[String(opzioni.logo || 'white').toLowerCase()] || set.white;
@@ -200,4 +201,4 @@ async function componiTipografia(scene, card, opzioni) {
   });
 }
 
-module.exports = { componiTipografia, htmlTitolo, htmlCard, corpoTitolo, POSIZIONI };
+module.exports = { componiTipografia, htmlTitolo, htmlCard, corpoTitolo, POSIZIONI, LOGOS };
