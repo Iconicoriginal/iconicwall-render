@@ -193,7 +193,11 @@ function htmlPrimaDopo(cfg, foto, cucitura, righe) {
 
 // --- diagonale (IconicDress) --------------------------------------------
 // Una sola cornice: la foto prima nel triangolo in alto a sinistra, la dopo in
-// basso a destra, separate da una linea oro. La linea va da (alto% della
+// basso a destra, separate da una linea oro. Le etichette sono quelle del
+// template grafica v1 («Com'e oggi», «Con IconicDress»): fino al 06/10/2026
+// dicevano «Prima» e «Dopo», e sono state allineate su decisione di Yuri.
+// Da quel giorno il PNG di diagonale NON e piu identico a quello di prima.
+// La linea va da (alto% della
 // larghezza, bordo superiore) a (basso% della larghezza, bordo inferiore della
 // foto); default da angolo ad angolo. Firma: IconicDress grande + 3M DI-NOC.
 function taglio(valore) {
@@ -227,7 +231,7 @@ function htmlDiagonale(cfg, foto, cucitura, righe) {
 <div class="foto prima"><img src="${fileUrl(foto.before)}" style="object-position:${fp.x}% ${fp.y}%"></div>
 <div class="foto dopo"><img src="${fileUrl(foto.after)}" style="object-position:${fd.x}% ${fd.y}%"></div>
 <svg class="linea" width="${W}" height="${fotoH}" viewBox="0 0 ${W} ${fotoH}"><line x1="${xa}" y1="0" x2="${xb}" y2="${fotoH}" stroke="${cucitura}" stroke-width="3"/></svg>
-<div class="chip p">Prima</div><div class="chip d">Dopo</div>
+<div class="chip p">Com'è oggi</div><div class="chip d">Con IconicDress</div>
 <div class="banda"><div class="testo">${htmlTesto(cfg, righe, Number(cfg.size) || 76)}</div>
 <div class="firma"><img class="logo-dress" src="${fileUrl(LOGO_ICONICDRESS)}">
 <div class="dx"><img class="logo-3m" src="${fileUrl(LOGO_3M)}">${site ? `<div class="site">${esc(site)}</div>` : ''}</div></div></div>
