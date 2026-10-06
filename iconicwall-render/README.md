@@ -37,8 +37,81 @@ Senza `layout` vale il layout storico qui sopra, invariato. Specifica: Notion «
 | `iconic` | `contract` | `photo` | `indice` **obbligatorio** (1-99 → «N° 0X»), `focus` |
 | `iconic` | `confronto` | nessuno | `chips` (max 4), `barrato` (default Sostituire), `vivo` (default Rivestire) |
 | `iconicdress` | `diagonale` | `imageBefore`, `imageAfter` | `focusBefore`, `focusAfter`, `diagonal`, `seam` |
+| `iconicdress` | `cursore` | `imageBefore`, `imageAfter` | `focus` |
+| `iconicdress` | `orizzonte` | `imageBefore`, `imageAfter` | `focus`, `orizzonte.split` (15-85, default 56), `seam` |
+| `iconicdress` | `lente` | `imageBefore`, `imageAfter` | `focus`, `lente.x`, `lente.y`, `lente.r` |
+| `iconicdress` | `finiture` | `imageBefore`, `imageAfter` | `finiture` **obbligatorio** (max 4), `focus` |
+| `iconicdress` | `car_catalogo` · `car_notte` | `imageBefore` e/o `imageAfter` | `ruolo`, `indice`, `totale` **obbligatori**, `mostra` |
+| `iconicdress` | `car_scheda` | `imageBefore`, `imageAfter` | `ruolo`, `indice`, `totale` **obbligatori**, `finiture` |
+| `iconicdress` | `car_app` | `schermata` | `ruolo`, `indice`, `totale` **obbligatori**, `passo` |
+| `iconicdress` | `car_panorama` | `imageBefore`, `imageAfter` | `ruolo`, `indice`, `totale` **obbligatori** |
 
 Per `iconicdress` il campo `layout` è obbligatorio.
+
+### I cinque layout del post singolo IconicDress
+
+Specifica: Notion «IconicDress — Template grafica v1». Struttura comune dei
+quattro nuovi: foto nei primi 1020 px, banda Paper di 330 px in basso con
+eyebrow, filetto, titolo e riga dei loghi. `diagonale` ha proporzioni sue
+(918/432) perché è nato prima della specifica ed era già in produzione: lì non
+si tocca niente, e le sue etichette restano «Prima» e «Dopo» invece di
+«Com'è oggi» e «Con IconicDress».
+
+- **`cursore`** — linea verticale Paper al centro con la maniglia tonda dello
+  slider dell'app; a sinistra com'è oggi, a destra il rendering.
+- **`orizzonte`** — linea oro orizzontale, posizione regolabile con
+  `orizzonte.split` (default 56% della foto); sopra com'è oggi, sotto il
+  rendering. Da usare **solo** quando la superficie cambiata sta in basso.
+- **`lente`** — la foto di partenza intera, e un cerchio con bordo oro che
+  mostra il rendering su un dettaglio. `lente.x` e `lente.y` sono il centro in
+  percentuale della foto, `lente.r` il raggio in percentuale della larghezza
+  (default 50, 50, 26).
+- **`finiture`** — rendering a tutta immagine, la foto di partenza piccola in
+  alto a sinistra con la cornice Paper e il chip «Com'era», e nella banda le
+  tessere delle finiture usate.
+
+`finiture` vuole `finiture: [{codice, posizione}]` (o `"PS-3904MT fronte,
+PS-3100MT piano"`). Il campione lo scarica dal catalogo dell'app,
+`https://riqualificazione.iconicoriginal.it/assets/materials/<codice>.webp`:
+nessuna tessera ridisegnata a mano. Se un codice non c'è, 400 con l'indirizzo
+che ha risposto. La base si cambia con la variabile `CAMPIONI_BASE`.
+
+### I cinque branding dei caroselli
+
+Ogni chiamata rende **una** slide: il layout dice come si veste, `ruolo` che
+cosa ci sta dentro, `indice` e `totale` dove si trova nella serie.
+
+| ruolo | che cosa mostra |
+|---|---|
+| `copertina` | la prima slide: titolo e foto |
+| `foto` | una slide di mezzo |
+| `finiture` | la tabella delle finiture usate (serve `finiture`) |
+| `chiusura` | solo testo, con l'invito a provare l'app e i loghi |
+
+- **A · `car_catalogo`** — fondo Paper, la foto con il margine di una tavola di
+  campionario, «N° 0X» in oro in alto, banda del titolo in basso.
+- **B · `car_notte`** — fondo Ink, titolo in alto, foto a tutta larghezza,
+  filetto oro e numerazione in basso.
+- **C · `car_scheda`** — fondo Paper, le due foto con i chip «Stato di fatto» e
+  «Simulazione», sotto la tabella delle finiture.
+- **D · `car_app`** — il racconto passo per passo dentro un telefono. Vuole una
+  **schermata vera** dell'app (campo file `schermata`): senza, 400. Una
+  schermata disegnata non si fa.
+- **E · `car_panorama`** — una foto sola distesa su tutte le slide, con la linea
+  oro diagonale al centro della tela; ogni chiamata restituisce la sua fetta.
+  La foto deve reggere l'ingrandimento: la tela è larga 1080 × `totale`, e oltre
+  1,5 volte di ingrandimento il render risponde 400 dicendo quanto dovrebbe
+  essere larga. È la metà meccanica della regola «la rotazione salta il
+  panorama quando la foto non lo regge».
+
+Le due foto arrivano dall'app e dal cantiere con la **stessa inquadratura ma
+risoluzioni diverse** (a Marcianise 2000×1500 e 1448×1086). Finché stanno in
+due riquadri separati non importa; dal momento che una taglia l'altra —
+cursore, orizzonte, lente, panorama — devono cadere sugli stessi pixel. Quello
+che conta è il **rapporto**, non la risoluzione: con lo stesso rapporto
+`object-fit: cover` le fa combaciare da sole e non si tocca niente; con rapporti
+diversi il render le porta al rapporto della foto di partenza prima di
+sovrapporle.
 
 ```json
 {

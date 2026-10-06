@@ -21,7 +21,12 @@ class RichiestaNonValida extends Error {
 const MARCHI = {
   iconicwall: ['classico'],
   iconic: ['classico', 'prima_dopo', 'stat', 'campionario', 'contract', 'confronto'],
-  iconicdress: ['diagonale'],
+  // IconicDress: i cinque layout del post singolo e i cinque branding dei
+  // caroselli (template grafica v1, 06/10/2026).
+  iconicdress: [
+    'diagonale', 'cursore', 'orizzonte', 'lente', 'finiture',
+    'car_catalogo', 'car_notte', 'car_scheda', 'car_app', 'car_panorama',
+  ],
 };
 
 function marchioDi(cfg) {

@@ -488,7 +488,25 @@ async function renderLayout(cfg, layout, files) {
   } finally {
     await b.close();
     fs.unlink(hp, () => {});
+    // I layout che si appoggiano a file temporanei (foto riportate alla stessa
+    // misura, campioni scaricati) li elencano qui: si cancellano come i file
+    // caricati dal server.
+    (ctx && ctx.temporanei || []).forEach(p => fs.unlink(p, () => {}));
   }
 }
 
-module.exports = { renderLayout, componiTitolo, focus, senzaDenaro, LAYOUT };
+module.exports = {
+  renderLayout, componiTitolo, focus, senzaDenaro, LAYOUT,
+  // Pezzi condivisi con dress.js. Esportarli evita di copiarli: una copia
+  // dell'oro o del filtro foto si scollerebbe al primo ritocco.
+  esc, fileUrl, cssBase, htmlTesto, SCRIPT_ADATTA, elenco, testoObbligatorio,
+  W, H, INK, PAPER, ORO_STRUTTURA, ORO_SCURO, ORO_ACCENTO, ORO, ORO_ACCENTO_SCURO, CHIARO,
+  SANS, FILTRO_FOTO, VELO_FOTO, SITI, ASSETS, FONT,
+  LOGO_ICONICDRESS, LOGO_3M, coloreCucitura, luminanza,
+};
+
+// I layout IconicDress aggiunti il 06/10 stanno in dress.js e si registrano
+// qui: cosi diagonale e i layout Iconic restano dove sono, senza toccarli.
+// Il require viene DOPO module.exports di proposito: dress.js richiede questo
+// modulo, e con il ciclo al contrario si ritroverebbe in mano un modulo vuoto.
+Object.assign(LAYOUT, require('./dress').LAYOUT_DRESS);

@@ -36,6 +36,9 @@ const campiFoto = upload.fields([
   { name: 'imageBefore', maxCount: 1 },
   { name: 'imageAfter', maxCount: 1 },
   { name: 'finiture', maxCount: 9 },
+  // Carosello «App»: la schermata vera dell'app. Il layout la pretende, una
+  // schermata disegnata non si fa (template grafica v1).
+  { name: 'schermata', maxCount: 1 },
 ]);
 
 app.post('/render', campiFoto, async (req, res) => {
@@ -67,15 +70,17 @@ app.post('/render', campiFoto, async (req, res) => {
     // che quelle arrivate siano disegnabili, prima di aprire Chromium.
     const files = {
       before: primo('imageBefore'), after: primo('imageAfter'), photo: primo('photo'),
+      schermata: primo('schermata'),
       finiture: (req.files && req.files.finiture) || [],
     };
-    for (const campo of ['before', 'after', 'photo']) {
+    for (const campo of ['before', 'after', 'photo', 'schermata']) {
       if (files[campo]) await verificaFoto(files[campo].path, files[campo].fieldname);
     }
     for (let i = 0; i < files.finiture.length; i++) await verificaFoto(files.finiture[i].path, 'finiture[' + i + ']');
     const png = await renderLayout(cfg, layout, {
       before: files.before && files.before.path, after: files.after && files.after.path,
-      photo: files.photo && files.photo.path, finiture: files.finiture.map(f => f.path),
+      photo: files.photo && files.photo.path, schermata: files.schermata && files.schermata.path,
+      finiture: files.finiture.map(f => f.path),
     });
     res.set('Content-Type', 'image/png');
     res.set('Content-Disposition', 'inline; filename="grafica.png"');
